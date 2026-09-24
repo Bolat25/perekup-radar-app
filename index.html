@@ -1,28 +1,32 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark light">
   <title>Perekup Radar</title>
-  <!-- Скрипт Telegram: тема, кнопки внизу экрана, sendData. Без Telegram — демо-режим. -->
+  <!-- Скрипт Telegram: тема, кнопка «Назад», sendData. Без Telegram — демо-режим. -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div id="banner" class="banner" hidden></div>
   <main id="app" aria-live="polite">
-    <p class="loading">…</p>
+    <div class="boot"><div class="radar big"></div></div>
   </main>
-  <!-- Кнопка «Сохранить» вне Telegram (в Telegram — его собственная кнопка внизу) -->
-  <div id="bottom" class="bottom" hidden>
-    <button id="bottom-button" class="button primary" type="button"></button>
+  <!-- Нижняя кнопка экрана: «Новая подписка», «Сохранить» -->
+  <div id="dock" class="dock" hidden>
+    <button id="dock-button" class="cta" type="button"></button>
   </div>
   <dialog id="demo-dialog" class="dialog">
     <p id="demo-title"></p>
     <pre id="demo-out"></pre>
-    <form method="dialog"><button class="button" id="demo-close"></button></form>
+    <form method="dialog"><button class="cta small" id="demo-close"></button></form>
   </dialog>
+  <script src="match.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
