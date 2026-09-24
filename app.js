@@ -227,10 +227,19 @@
 
     app.appendChild(h("h1", { text: T("app_title") }));
 
-    var status = state.u > Date.now() / 1000
+    var active = state.u > Date.now() / 1000;
+    var status = active
       ? h("div", { class: "status", text: T("access_until", { date: dateText(state.u), days: daysLeft(state.u) }) })
-      : h("div", { class: "status closed", text: T("access_closed", { contact: state.ct || "—" }) });
+      : h("div", { class: "status closed", text: T(state.pay ? "access_closed" : "access_closed_nopay") });
     app.appendChild(h("div", { class: "section" }, status));
+
+    if (state.pay) {
+      // оплата — в чате: приложение закрывается, бот присылает тарифы
+      app.appendChild(h("div", { style: "margin-top:12px" },
+        h("button", { class: "button" + (active ? "" : " primary"), type: "button",
+                      onclick: function () { send({ v: 1, op: "pay" }); } },
+          T(active ? "extend_btn" : "pay_btn"))));
+    }
 
     app.appendChild(sectionTitle(T("subs_title", { count: count, limit: state.lim })));
 
@@ -247,7 +256,7 @@
                     onclick: function () { openEditor(null); } }, T("add_sub"))));
 
     if (full) {
-      app.appendChild(h("p", { class: "note", text: T("limit_note", { count: count, limit: state.lim, contact: state.ct || "—" }) }));
+      app.appendChild(h("p", { class: "note", text: T("limit_note", { count: count, limit: state.lim }) }));
     }
 
     app.appendChild(sectionTitle(T("settings")));
@@ -663,7 +672,7 @@
     var root = (dirs.categories.children[""] || [])[0] || "";
     var leaf = laptops || (dirs.categories.children[root] || [])[0] || root;
     return {
-      v: 1, l: "ru", lim: 3, u: Math.floor(Date.now() / 1000) + 6 * 86400, ct: "@admin",
+      v: 1, l: "ru", lim: 3, u: Math.floor(Date.now() / 1000) + 6 * 86400, pay: 1,
       src: ["olx", "kaspi"], sr: 0, q: [23 * 60, 8 * 60, "silent"], qm: "silent", mw: 5, mx: 10,
       subs: [
         { i: 1, s: "olx", c: olx, k: "", w: ["iphone 15", "айфон 15"], x: ["чехол", "чехл"], f: null, t: 500000, p: 0, r: 1 },
