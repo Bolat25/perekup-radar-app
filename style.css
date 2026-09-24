@@ -1,0 +1,228 @@
+/* Цвета — из темы Telegram (--tg-theme-*). Вне Telegram (демо) — запасные,
+   светлые или тёмные по настройке системы. */
+:root {
+  --bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+  --section: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+  --text: var(--tg-theme-text-color, #1c1c1e);
+  --hint: var(--tg-theme-hint-color, #8a8a8e);
+  --link: var(--tg-theme-link-color, #2481cc);
+  --accent: var(--tg-theme-accent-text-color, var(--tg-theme-link-color, #2481cc));
+  --button: var(--tg-theme-button-color, #2481cc);
+  --button-text: var(--tg-theme-button-text-color, #ffffff);
+  --danger: var(--tg-theme-destructive-text-color, #e53935);
+  --line: var(--tg-theme-section-separator-color, rgba(128, 128, 128, 0.22));
+  --header: var(--tg-theme-section-header-text-color, var(--hint));
+  --chip: rgba(128, 128, 128, 0.14);
+  --radius: 12px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--tg-theme-secondary-bg-color, #000000);
+    --section: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #1c1c1e));
+    --text: var(--tg-theme-text-color, #f2f2f7);
+    --hint: var(--tg-theme-hint-color, #8e8e93);
+    --link: var(--tg-theme-link-color, #5ea8ff);
+    --accent: var(--tg-theme-accent-text-color, var(--tg-theme-link-color, #5ea8ff));
+    --button: var(--tg-theme-button-color, #3e88f7);
+    --danger: var(--tg-theme-destructive-text-color, #ff5b55);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 12px 16px 96px;
+}
+
+.loading, .empty { color: var(--hint); text-align: center; padding: 32px 0; }
+
+.banner {
+  background: #ffe8a3;
+  color: #4a3a00;
+  padding: 8px 16px;
+  font-size: 14px;
+  text-align: center;
+}
+
+h1 { font-size: 22px; margin: 4px 0 12px; }
+
+.section-title {
+  margin: 20px 4px 6px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--header);
+}
+
+.section {
+  background: var(--section);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.section + .note, .note { color: var(--hint); font-size: 13px; margin: 6px 4px 0; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.row + .row { border-top: 1px solid var(--line); }
+button.row { cursor: pointer; }
+button.row:active { background: var(--chip); }
+.row .grow { flex: 1; min-width: 0; }
+.row .value { color: var(--hint); text-align: right; overflow: hidden; text-overflow: ellipsis; }
+.row .chevron { color: var(--hint); }
+.row.selected .check { color: var(--accent); }
+
+.status { padding: 14px 16px; }
+.status.closed { color: var(--danger); }
+
+.card { display: block; padding: 12px 16px; }
+.row.card { display: flex; align-items: center; }
+.card .top { display: flex; justify-content: space-between; gap: 8px; }
+.card .words { font-weight: 600; margin: 2px 0; }
+.card .meta { color: var(--hint); font-size: 14px; }
+.card .minus { font-size: 14px; }
+.badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--hint);
+  white-space: nowrap;
+}
+.card.paused .words, .card.paused .meta { opacity: 0.6; }
+.card .actions { display: flex; gap: 8px; margin-top: 8px; }
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.button.primary { background: var(--button); color: var(--button-text); width: 100%; font-weight: 600; }
+.button.small { min-height: 34px; padding: 6px 12px; font-size: 14px; }
+.button.link { background: transparent; color: var(--link); padding-left: 0; padding-right: 0; }
+.button.danger { background: transparent; color: var(--danger); width: 100%; }
+.button[disabled] { opacity: 0.45; cursor: default; }
+
+.segmented { display: flex; gap: 6px; padding: 10px 16px; }
+.segmented button {
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text);
+  font: inherit;
+}
+.segmented button.on { background: var(--button); color: var(--button-text); font-weight: 600; }
+
+.field { padding: 10px 16px; }
+.field + .field { border-top: 1px solid var(--line); }
+
+input[type=text], input[type=search], select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 6px 6px 6px 12px;
+  border-radius: 16px;
+  background: var(--chip);
+  font-size: 15px;
+}
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip button {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: var(--hint);
+  font-size: 18px;
+  line-height: 1;
+}
+.chips.minus .chip { color: var(--danger); }
+
+.presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pair { display: flex; gap: 8px; align-items: center; }
+.pair label { color: var(--hint); font-size: 14px; }
+
+.toggle { display: flex; align-items: center; gap: 12px; }
+.toggle input { width: 22px; height: 22px; accent-color: var(--button); }
+
+.error { color: var(--danger); font-size: 14px; margin: 8px 4px 0; }
+
+.bottom {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.bottom .button { max-width: 608px; margin: 0 auto; display: flex; }
+
+.dialog {
+  width: min(92vw, 560px);
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--section);
+  color: var(--text);
+}
+.dialog pre {
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  background: var(--chip);
+  padding: 10px;
+  border-radius: 8px;
+}
+
+@media (max-width: 360px) {
+  main { padding-left: 10px; padding-right: 10px; }
+  .row { padding-left: 12px; padding-right: 12px; }
+}
