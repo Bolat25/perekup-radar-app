@@ -106,8 +106,6 @@
   }
 
   var ICONS = {
-    pin: '<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
-    price: '<path d="M4 7h16M4 12h16M4 17h10"/>',
     grid: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/>',
     moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
@@ -118,13 +116,6 @@
     var span = document.createElement("span");
     span.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + "</svg>";
     return span.firstChild;
-  }
-
-  function badges(source) {
-    var list = source === "all" ? ["olx", "kaspi"] : [source];
-    return list.map(function (s) {
-      return h("span", { class: "pf " + s }, h("span", { class: "dot " + s[0] }), LABELS[s]);
-    });
   }
 
   function sec(title, right) {
@@ -150,7 +141,7 @@
       : !(window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches);
     document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
     if (inTelegram) {
-      var bg = dark ? "#0b0f1a" : "#eef1f8";
+      var bg = dark ? "#0d0b1a" : "#f4f2fb";
       try { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); } catch (e) { /* старый клиент */ }
     }
   }
@@ -308,7 +299,7 @@
       app.appendChild(h("div", { class: "empty-card" }, h("p", { text: T("cut_note") })));
     } else if (!subs.length) {
       app.appendChild(h("div", { class: "empty-card" },
-        h("div", { class: "radar big still", style: "margin:0 auto 14px" }),
+        h("div", { class: "radar still", style: "margin:0 auto 14px" }),
         h("b", { text: T("no_subs_title") }), h("p", { text: T("no_subs") })));
     } else {
       subs.forEach(function (sub, index) { app.appendChild(subCard(sub, index)); });
@@ -324,25 +315,21 @@
     setDock(T("add_sub"), function () { openEditor(null); }, !full);
   }
 
+  // яркий блок: сколько нашлось сегодня; кольца в углу — радар, луч бежит, пока он работает
   function hero(active, running, count) {
     var live = !active ? ["bad", T("live_closed")]
       : !count ? ["off", T("live_empty")]
       : running ? ["on", T("live_on")] : ["off", T("live_paused")];
     var st = state.st || {};
 
-    return h("section", { class: "hero" },
-      h("div", { class: "live " + live[0] }, h("i"), live[1]),
-      h("h2", { text: T("app_title") }),
-      h("p", { class: "sub", text: T("hero_sub") }),
-      h("div", { class: "radar" + (live[0] === "on" ? "" : " still") },
-        live[0] === "on" ? [
-          h("span", { class: "blip o", style: "left:50px;top:42px;animation-delay:.2s" }),
-          h("span", { class: "blip k", style: "left:112px;top:72px;animation-delay:1.1s" }),
-          h("span", { class: "blip o", style: "left:72px;top:122px;animation-delay:2.2s" }),
-          h("span", { class: "blip k", style: "left:42px;top:94px;animation-delay:2.8s" })
-        ] : null),
+    return h("section", { class: "hero " + live[0] },
+      h("div", { class: "orbit" }, live[0] === "on" ? h("i", { class: "sweep" }) : null),
+      h("div", { class: "hero-top" },
+        h("span", { class: "live " + live[0] }, h("i"), live[1].charAt(0).toUpperCase() + live[1].slice(1)),
+        h("span", { class: "brand", text: T("app_title") })),
+      h("div", { class: "big", text: st.d != null ? number(st.d) : "—" }),
+      h("div", { class: "big-sub", text: T("stat_today") }),
       h("div", { class: "stats" },
-        stat(st.d != null ? number(st.d) : "—", T("stat_today")),
         stat(st.w != null ? number(st.w) : "—", T("stat_week")),
         stat(speedText(st.m), T("stat_speed"))));
   }
@@ -353,19 +340,19 @@
 
   function accessCard(active) {
     var days = active ? daysLeft(state.u) : 0;
-    var share = Math.min(100, Math.round(days / 30 * 100));
-    var ring = h("div", { class: "ring",
-      style: "background:conic-gradient(var(--" + (active ? "accent" : "danger") + ") 0 " + (active ? share : 100)
-             + "%, var(--line) " + (active ? share : 100) + "% 100%)" },
-      h("span", { text: active ? days + (lang === "kk" ? "к" : "д") : "⛔" }));
+    var tile = h("div", { class: "days" }, active
+      ? [h("b", { text: String(days) }), h("small", { text: T("days_short") })]
+      : h("b", { text: "⛔" }));
 
     var text = active
       ? h("div", { class: "t" }, h("b", { text: T("access_until", { date: dateText(state.u) }) }),
-          h("small", { text: T("access_days", { days: days }) }))
+          h("small", { text: T(state.pay ? "access_hint" : "access_days", { days: days }) }))
       : h("div", { class: "t" }, h("b", { text: T("access_closed") }),
           h("small", { text: T(state.pay ? "access_closed_pay" : "access_closed_nopay") }));
 
-    return h("div", { class: "access" + (active ? "" : " closed") }, ring, text,
+    var mood = !active ? " closed" : days <= 2 ? " soon" : "";
+
+    return h("div", { class: "access" + mood }, tile, text,
       state.pay ? h("button", { class: "mini", type: "button",
         onclick: function () { send({ v: 1, op: "pay" }); } }, T(active ? "extend_btn" : "pay_btn")) : null);
   }
@@ -383,31 +370,41 @@
         });
       } });
 
-    var head = h("div", { class: "head" },
-      h("div", { class: "badges" }, badges(sub.s), paused ? h("span", { class: "tag", text: T("paused_badge") }) : null),
-      toggle);
+    // площадки кружками, «где» строкой: «Везде · Астана»
+    var where = (sub.s === "all" ? T("source_all") : LABELS[sub.s]) + (sub.ro ? "" : " · " + cityName(sub.c));
+    var head = h("div", { class: "head" }, logos(sub.s), h("span", { class: "where", text: where }), toggle);
 
     if (sub.ro) {
       return h("div", { class: "card " + (paused ? "off" : "on"), style: delay }, head,
-        h("div", { class: "chips" }, h("span", { class: "chip", text: (sub.w || []).join(", ") + " …" })),
+        h("div", { class: "title", text: (sub.w || []).join(" · ") + " …" }),
         h("p", { class: "note", text: T("ro_note") }),
         h("div", { class: "actions" }, h("button", { class: "ghost danger", type: "button",
           onclick: function () { confirmAsk(T("confirm_delete"), function () { send({ v: 1, op: "delete", i: sub.i }); }); } },
           T("btn_delete"))));
     }
 
-    var meta = [h("span", null, icon("pin"), cityName(sub.c))];
-    meta.push(h("span", null, icon("price"), priceText(sub.f, sub.t)));
-    if (hasKaspi(sub.s) && sub.k) meta.push(h("span", null, icon("grid"), categoryName(sub.k)));
+    var tags = [];
+    if (paused) tags.push(h("span", { class: "tag", text: T("paused_badge") }));
+    if (sub.f != null || sub.t != null) tags.push(h("span", { class: "tag strong", text: priceText(sub.f, sub.t) }));
+    if (hasKaspi(sub.s) && sub.k) {
+      var node = dirs.categories.byKey[sub.k];
+      tags.push(h("span", { class: "tag" }, icon("grid"), node ? node.n : sub.k));
+    }
+    sub.x.forEach(function (w) { tags.push(h("span", { class: "tag minus" }, h("span", { text: w }))); });
 
     return h("button", { class: "card " + (paused ? "off" : "on"), type: "button", style: delay,
                          onclick: function () { openEditor(sub); } },
       head,
-      h("div", { class: "chips" },
-        sub.w.map(function (w) { return h("span", { class: "chip" }, h("span", { text: w })); }),
-        sub.x.map(function (w) { return h("span", { class: "chip minus" }, h("span", { text: w })); })),
-      h("div", { class: "meta" }, meta),
+      h("div", { class: "title", text: sub.w.join(" · ") }),
+      tags.length ? h("div", { class: "tags" }, tags) : null,
       activity(sub));
+  }
+
+  function logos(source) {
+    var list = source === "all" ? ["olx", "kaspi"] : [source];
+    return h("div", { class: "logos" }, list.map(function (s) {
+      return h("span", { class: "lg " + s, title: LABELS[s], text: LABELS[s].charAt(0) });
+    }));
   }
 
   function activity(sub) {
@@ -417,9 +414,12 @@
       // «a» посчитано, когда бот собирал адрес; прибавляем, сколько прошло с тех пор
       ago += Math.max(0, Math.floor((Date.now() / 1000 - state.st.t) / 60));
     }
-    return h("div", { class: "foot" },
-      h("span", null, T("week_found", { n: "" }), h("b", { text: number(sub.n) })),
-      h("span", { text: ago != null && ago >= 0 ? T("last_ago", { ago: agoText(ago) }) : T("nothing_yet") }));
+    var seen = ago != null && ago >= 0;
+    // свежая находка (меньше часа) — точка пульсирует
+    return h("div", { class: "week" },
+      h("div", null, h("b", { text: number(sub.n) }), h("small", { text: T("stat_week") })),
+      h("span", { class: "last" + (seen && ago < 60 ? " fresh" : "") },
+        seen ? [h("i"), agoText(ago)] : T("nothing_yet")));
   }
 
   function quietSummary(q) {
@@ -831,20 +831,22 @@
   // циферблат: ночное окно закрашено; полночь сверху
   function clockFace(from, to) {
     var a = from / 1440 * 360, b = to / 1440 * 360;
-    var night = "var(--accent-2)", day = "var(--card-2)";
+    var night = "var(--violet)", day = "var(--surface-2)";
     var gradient = from < to
       ? day + " 0 " + a + "deg, " + night + " " + a + "deg " + b + "deg, " + day + " " + b + "deg 360deg"
       : night + " 0 " + b + "deg, " + day + " " + b + "deg " + a + "deg, " + night + " " + a + "deg 360deg";
     var length = ((to - from) + 1440) % 1440;
 
-    return h("div", { class: "clock", style: "background:conic-gradient(" + gradient + ")" },
-      h("span", { class: "h", style: "top:26px;left:50%;transform:translateX(-50%)", text: "00" }),
-      h("span", { class: "h", style: "right:28px;top:50%;transform:translateY(-50%)", text: "06" }),
-      h("span", { class: "h", style: "bottom:26px;left:50%;transform:translateX(-50%)", text: "12" }),
-      h("span", { class: "h", style: "left:28px;top:50%;transform:translateY(-50%)", text: "18" }),
-      h("div", { class: "in" }, h("div", null,
-        h("b", { text: timeText(from) + " – " + timeText(to) }),
-        h("small", { text: T("quiet_hours", { n: Math.round(length / 60 * 10) / 10 }) }))));
+    // подписи часов — снаружи кольца; время в центре в две строки: «с» и «до»
+    return h("div", { class: "clockwrap" },
+      h("span", { class: "h t", text: "00" }),
+      h("span", { class: "h r", text: "06" }),
+      h("span", { class: "h b", text: "12" }),
+      h("span", { class: "h l", text: "18" }),
+      h("div", { class: "clock", style: "background:conic-gradient(" + gradient + ")" },
+        h("div", { class: "in" }, h("div", null,
+          h("b", { text: timeText(from) }), h("i"), h("b", { text: timeText(to) }),
+          h("small", { text: T("quiet_hours", { n: Math.round(length / 60 * 10) / 10 }) })))));
   }
 
   function renderSettings(screen) {
