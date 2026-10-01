@@ -517,20 +517,7 @@
       })));
     }
 
-    // площадка
-    var sources = canAll() ? ["all", "olx", "kaspi"] : state.src;
-    if (sources.length > 1) {
-      app.appendChild(label(T("source")));
-      app.appendChild(h("div", { class: "seg" }, sources.map(function (s) {
-        return h("button", { type: "button", class: d.s === s ? "on" : "",
-          onclick: function () { switchSource(d, s); haptic(); render(); } },
-          s === "all" ? [h("span", { class: "dot o" }), h("span", { class: "dot k" }), T("source_all")]
-                      : [h("span", { class: "dot " + s[0] }), LABELS[s]]);
-      })));
-      if (d.s === "all") app.appendChild(h("p", { class: "seg-hint", text: T("source_all_hint") }));
-    }
-
-    // слова и минус-слова
+    // слова (главное — сверху); минус-слова, площадки, поднятые — в «Дополнительно»
     var preview = h("div", { class: "preview" });
     function changed() { drawPreview(preview, d); validate(); }
 
@@ -542,15 +529,6 @@
       app.appendChild(label(T("words"), state.fc && flScoped(d.fl) ? T("optional") : ""));
       app.appendChild(chipsField(d.w, state.mw, "", changed));
       app.appendChild(h("p", { class: "note", text: T("words_hint", { max: state.mw }) }));
-    }
-
-    app.appendChild(label(T("minus")));
-    app.appendChild(chipsField(d.x, state.mx, "minus", changed));
-    app.appendChild(h("p", { class: "note", text: T("minus_hint", { max: state.mx }) }));
-
-    if (!byModels) {
-      app.appendChild(preview);
-      drawPreview(preview, d);
     }
 
     // товар, модели и фильтры (PLAN_FILTERS.md)
@@ -590,13 +568,45 @@
     app.appendChild(priceField(d));
     app.appendChild(h("p", { class: "note", text: T("price_hint") }));
 
-    // поднятые (старые объявления, которым обновили дату)
-    app.appendChild(label(T("bumped")));
-    app.appendChild(h("div", { class: "seg" }, [[0, T("bumped_drop")], [1, T("bumped_all")]].map(function (pair) {
-      return h("button", { type: "button", class: d.b === pair[0] ? "on" : "",
-        onclick: function () { d.b = pair[0]; haptic(); render(); } }, pair[1]);
-    })));
-    app.appendChild(h("p", { class: "seg-hint", text: T("bumped_hint") }));
+    // «Дополнительно»: где искать, минус-слова, поднятые, проверка «Что придёт» — свёрнуто
+    var sources = canAll() ? ["all", "olx", "kaspi"] : state.src;
+    var extras = [sources.length > 1 ? (d.s === "all" ? T("source_all") : LABELS[d.s]) : "",
+                  d.x.length ? T("extra_minus", { n: d.x.length }) : "",
+                  d.b ? T("bumped_tag") : ""].filter(Boolean).join(" · ");
+    app.appendChild(h("button", { type: "button", class: "row more-toggle", "aria-expanded": screen.more ? "true" : "false",
+      onclick: function () { screen.more = !screen.more; haptic(); render(); } },
+      h("span", { class: "grow" }, T("more_settings"), h("small", { text: extras || T("more_settings_hint") })),
+      h("span", { class: "chev", text: screen.more ? "⌃" : "⌄" })));
+
+    if (screen.more) {
+      if (sources.length > 1) {
+        app.appendChild(label(T("source")));
+        app.appendChild(h("div", { class: "seg" }, sources.map(function (s) {
+          return h("button", { type: "button", class: d.s === s ? "on" : "",
+            onclick: function () { switchSource(d, s); haptic(); render(); } },
+            s === "all" ? [h("span", { class: "dot o" }), h("span", { class: "dot k" }), T("source_all")]
+                        : [h("span", { class: "dot " + s[0] }), LABELS[s]]);
+        })));
+        if (d.s === "all") app.appendChild(h("p", { class: "seg-hint", text: T("source_all_hint") }));
+      }
+
+      app.appendChild(label(T("minus")));
+      app.appendChild(chipsField(d.x, state.mx, "minus", changed));
+      app.appendChild(h("p", { class: "note", text: T("minus_hint", { max: state.mx }) }));
+
+      if (!byModels) {
+        app.appendChild(preview);
+        drawPreview(preview, d);
+      }
+
+      // поднятые (старые объявления, которым обновили дату)
+      app.appendChild(label(T("bumped")));
+      app.appendChild(h("div", { class: "seg" }, [[0, T("bumped_drop")], [1, T("bumped_all")]].map(function (pair) {
+        return h("button", { type: "button", class: d.b === pair[0] ? "on" : "",
+          onclick: function () { d.b = pair[0]; haptic(); render(); } }, pair[1]);
+      })));
+      app.appendChild(h("p", { class: "seg-hint", text: T("bumped_hint") }));
+    }
 
     if (!isNew) {
       app.appendChild(label(T("pause_label")));
@@ -889,10 +899,9 @@
   // fl уходит боту, только если его меняли здесь: иначе бот оставляет прежние фильтры.
 
   var fdir = { index: null, loading: null, files: {}, olxById: {}, kaspiByPath: {}, roots: {} };
-  // как в чате (telegram_bot.PRODUCT_ORDER, MODEL_IMPLIES, pretty_model)
-  var PRODUCT_ORDER = { phones: ["capacity", "state"], consoles: ["state"], macbook: ["state"],
-                        airpods: ["state"], watch: ["state"], tablets: ["state"], gpu: ["state"] };
-  var MODEL_IMPLIES = ["brand"];
+  // главные и скрытые при модели фильтры — из выгрузки (номер у фильтра, mm/mh у товара),
+  // своих копий правил здесь нет: чат и приложение не разойдутся (PLAN_UX.md, 3.1)
+  // названия моделей — как в чате (telegram_bot.pretty_model)
   var MODEL_WORDS = { iphone: "iPhone", ipad: "iPad", macbook: "MacBook", airpods: "AirPods", watch: "Watch",
                       galaxy: "Galaxy", redmi: "Redmi", note: "Note", poco: "Poco", xiaomi: "Xiaomi",
                       xbox: "Xbox", "switch": "Switch", steam: "Steam", deck: "Deck", series: "Series" };
@@ -900,7 +909,7 @@
   // пределы бота (webapp_ops.MAX_FILTER_*)
   var MAX_FILTER_MODELS = 30;
   var MAX_FILTER_VALUES = 60;
-  var SHOWN_VALUES = 40;
+  var SHOWN_VALUES = 12;
   var SEPARATORS = /[^0-9a-zа-яёәғқңөұүһі]+/g;
 
   function ensureIndex() {
@@ -1245,15 +1254,31 @@
     loadFilters(d.fl).then(function (filters) {
       if (top() !== screen) return;
       pruneFilters(d.fl, filters);
-      var byKey = {};
-      filters.forEach(function (f) { byKey[f[0]] = f; });
-      var first = (PRODUCT_ORDER[d.fl.k] || []).filter(function (k) { return byKey[k]; });
-      var keys = first.concat(filters.map(function (f) { return f[0]; }).filter(function (k) { return first.indexOf(k) < 0; }));
-      if (flModels(d.fl).length) keys = keys.filter(function (k) { return MODEL_IMPLIES.indexOf(k) < 0; });
+      var parts = filterMenu(d, filters);
+      screen.open = screen.open || {};
 
       box.innerHTML = "";
-      if (!keys.length) box.appendChild(h("p", { class: "note", text: T("filters_none") }));
-      keys.forEach(function (key) { box.appendChild(filterBlock(d, byKey[key])); });
+      if (!parts.main.length) box.appendChild(h("p", { class: "note", text: T("filters_none") }));
+      parts.main.forEach(function (f) { box.appendChild(filterBlock(d, f)); });
+
+      if (parts.more.length) {
+        box.appendChild(h("button", { type: "button", class: "row more-toggle", "aria-expanded": screen.more ? "true" : "false",
+          onclick: function () { screen.more = !screen.more; haptic(); render(); } },
+          h("span", { class: "grow", text: T(screen.more ? "filters_less" : "filters_more", { n: parts.more.length }) }),
+          h("span", { class: "chev", text: screen.more ? "⌃" : "⌄" })));
+
+        if (screen.more) {
+          parts.more.forEach(function (f) {
+            if (screen.open[f[0]]) { box.appendChild(filterBlock(d, f)); return; }
+            // свёрнутый фильтр — строка «Название · значение», раскрывается по нажатию
+            box.appendChild(h("button", { type: "button", class: "row", "aria-expanded": "false",
+              onclick: function () { screen.open[f[0]] = true; haptic(); render(); } },
+              h("span", { class: "grow", text: filterName(f) }),
+              h("span", { class: "val", text: filterValue(d, f) }),
+              h("span", { class: "chev", text: "›" })));
+          });
+        }
+      }
     }, function () {
       if (top() !== screen) return;
       box.innerHTML = "";
@@ -1261,9 +1286,47 @@
     });
   }
 
+  // главные — по номеру из выгрузки (как в чате); выбрана модель своего товара — mm/mh товара
+  function filterMenu(d, filters) {
+    var p = productOf(d.fl.k), withModels = flModels(d.fl).length > 0 && p;
+    var hidden = withModels ? p.mh || [] : [];
+    var shown = filters.filter(function (f) { return hidden.indexOf(f[0]) < 0; });
+    var main;
+    if (withModels) {
+      main = (p.mm || []).map(function (k) { return shown.filter(function (f) { return f[0] === k; })[0]; })
+        .filter(Boolean);
+    } else {
+      main = shown.filter(function (f) { return f[6]; }).sort(function (a, b) { return a[6] - b[6]; });
+    }
+    return { main: main, more: shown.filter(function (f) { return main.indexOf(f) < 0; }) };
+  }
+
+  function filterName(f) {
+    return (lang === "kk" && f[3] ? f[3] : f[2]) + (f[4] ? ", " + f[4] : "");
+  }
+
+  // текущее значение фильтра для заголовка: «256 Гб, 512 Гб», «2015–2020», «любой»
+  function filterValue(d, f) {
+    var text;
+    if (f[1] === "range") {
+      var r = (d.fl.r || {})[f[0]];
+      text = !r ? "" : r[0] != null && r[1] != null ? r[0] + "–" + r[1]
+        : r[0] != null ? T("range_from_n", { n: r[0] }) : T("range_to_n", { n: r[1] });
+    } else {
+      var labels = {};
+      f[5].forEach(function (v) { labels[v[0]] = v[1]; });
+      text = ((d.fl.f || {})[f[0]] || []).map(function (k) { return labels[k] || k; }).join(", ");
+    }
+    if (!text) return T("filter_value_any");
+    return text.length > 28 ? text.slice(0, 27) + "…" : text;
+  }
+
   function filterBlock(d, f) {
-    var key = f[0], kind = f[1], name = lang === "kk" && f[3] ? f[3] : f[2], unit = f[4], values = f[5];
-    var block = h("div", { class: "filter" }, label(name + (unit ? ", " + unit : "")));
+    var key = f[0], kind = f[1], values = f[5];
+    var head = label(filterName(f), filterValue(d, f));
+    var block = h("div", { class: "filter" }, head);
+    // значение в заголовке обновляется сразу, без перерисовки экрана
+    function refresh() { var em = head.querySelector("em"); if (em) em.textContent = filterValue(d, f); }
 
     if (kind === "range") {
       var r = ((d.fl.r || {})[key] || [null, null]).slice();
@@ -1275,6 +1338,7 @@
         if (r[0] == null && r[1] == null) delete d.fl.r[key]; else d.fl.r[key] = r.slice();
         d.flDirty = true;
         hint.hidden = !(r[0] != null && r[1] != null && r[0] > r[1]);
+        refresh();
       };
       var box = function (i, caption) {
         return h("label", null, h("small", { text: caption }),
@@ -1306,6 +1370,7 @@
       d.flDirty = true;
       haptic();
       draw();
+      refresh();
     }
 
     function draw() {
@@ -1326,6 +1391,7 @@
         d.flDirty = true;
         haptic();
         draw();
+        refresh();
       }));
       shown.forEach(function (v) {
         pills.appendChild(pill(v[1], list.indexOf(v[0]) >= 0, function () { pick(v[0]); }));

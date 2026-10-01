@@ -156,7 +156,15 @@
     "err_range": "Проверьте фильтр: «от» больше, чем «до».",
     "preview_fl_note": "Примеры — только по словам, без категории и фильтров.",
     "product_current": "Сейчас выбрано",
-    "product_current_hint": "Нажмите, чтобы изменить фильтры"
+    "product_current_hint": "Нажмите, чтобы изменить фильтры",
+    "filters_more": "➕ Ещё фильтры ({n})",
+    "filters_less": "➖ Свернуть ({n})",
+    "filter_value_any": "любой",
+    "more_settings": "Дополнительно",
+    "more_settings_hint": "площадки, минус-слова, поднятые",
+    "extra_minus": "минус-слов: {n}",
+    "range_from_n": "от {n}",
+    "range_to_n": "до {n}"
   },
   "kk": {
     "app_title": "Perekup Radar",
@@ -315,6 +323,14 @@
     "err_range": "Сүзгіні тексеріңіз: «бастап» «дейіннен» үлкен.",
     "preview_fl_note": "Мысалдар — тек сөздер бойынша, санат пен сүзгісіз.",
     "product_current": "Қазір таңдалған",
-    "product_current_hint": "Сүзгілерді өзгерту үшін басыңыз"
+    "product_current_hint": "Сүзгілерді өзгерту үшін басыңыз",
+    "filters_more": "➕ Тағы сүзгілер ({n})",
+    "filters_less": "➖ Жабу ({n})",
+    "filter_value_any": "кез келген",
+    "more_settings": "Қосымша",
+    "more_settings_hint": "площадкалар, минус-сөздер, көтерілгендер",
+    "extra_minus": "минус-сөз: {n}",
+    "range_from_n": "{n} бастап",
+    "range_to_n": "{n} дейін"
   }
 }

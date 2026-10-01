@@ -473,3 +473,6 @@ h1 { font-family: var(--display); font-size: 24px; font-weight: 700; letter-spac
 .filter { margin-bottom: 4px; }
 .filter .search { margin-bottom: 8px; }
 .pills .note.full { flex-basis: 100%; margin-top: 4px; }
+.more-toggle { margin-top: 18px; }
+.more-toggle small { display: block; color: var(--muted); font-size: 12px; font-weight: 600; margin-top: 2px; }
+.filter .label em { color: var(--accent-text); }
