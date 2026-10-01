@@ -8,4 +8,7 @@
 
 - `index.html`, `app.js`, `style.css` — страница;
 - `i18n.json` — тексты (ru, kk);
-- `data/` — справочники городов OLX и Kaspi, категорий Kaspi (выгружает `tools/export_webapp.py` бота).
+- `match.js` — правила совпадения слов для блока «Что придёт» (копия правил бота);
+- `data/` — справочники городов OLX и Kaspi, категорий Kaspi, готовые подписки и
+  `data/filters/` — товары, модели, категории и фильтры OLX и Kaspi (по разделам;
+  всё выгружает `tools/export_webapp.py` бота).

@@ -4,7 +4,9 @@
  *   - настройки подписчика бот кладёт в адрес кнопки: #s=j.<base64 JSON> или
  *     #s=z.<base64 deflate> (см. webapp_state.py). Хэш не уходит на сервер;
  *   - справочники — статические файлы data/*.json (tools/export_webapp.py):
- *     cities.json — общий список городов OLX + Kaspi, kaspi_categories.json.
+ *     cities.json — общий список городов OLX + Kaspi, kaspi_categories.json,
+ *     presets.json — готовые подписки (те же, что в чате; может отсутствовать),
+ *     filters/*.json — товары, модели и фильтры OLX и Kaspi (если бот их включил: state.fc).
  * Куда уходят изменения:
  *   - Telegram.WebApp.sendData(JSON одной операции), до 4096 байт. После этого
  *     Telegram закрывает приложение, а бот отвечает в чате. Бот проверяет всё
@@ -16,7 +18,9 @@
   "use strict";
 
   var tg = window.Telegram && window.Telegram.WebApp;
-  var inTelegram = !!(tg && tg.initData);
+  // initData пустой у приложения с кнопки клавиатуры (а только с неё работает sendData),
+  // поэтому Telegram узнаём по платформе: вне Telegram скрипт ставит «unknown»
+  var inTelegram = !!(tg && (tg.initData || (tg.platform && tg.platform !== "unknown")));
   var match = window.PRMatch;
 
   var LABELS = { olx: "OLX", kaspi: "Kaspi" };
@@ -196,7 +200,7 @@
       app.appendChild(h("button", { class: "back", type: "button", onclick: pop }, "‹ " + T("back")));
     }
     ({ home: renderHome, editor: renderEditor, city: renderCity, category: renderCategory,
-       settings: renderSettings })[screen.name](screen);
+       product: renderProduct, settings: renderSettings })[screen.name](screen);
   }
 
   // ------------------------------------------------------------ отправка боту
@@ -385,17 +389,23 @@
 
     var tags = [];
     if (paused) tags.push(h("span", { class: "tag", text: T("paused_badge") }));
+    if (sub.b) tags.push(h("span", { class: "tag", text: T("bumped_tag") }));
     if (sub.f != null || sub.t != null) tags.push(h("span", { class: "tag strong", text: priceText(sub.f, sub.t) }));
     if (hasKaspi(sub.s) && sub.k) {
       var node = dirs.categories.byKey[sub.k];
       tags.push(h("span", { class: "tag" }, icon("grid"), node ? node.n : sub.k));
+    }
+    // модели уже в заголовке, если слов нет; у своего товара вместо значка — его эмодзи
+    if (flScoped(sub.fl)) {
+      tags.push(h("span", { class: "tag" }, productOf(sub.fl.k) ? null : icon("grid"),
+                  flSummary(sub.fl, !sub.w.length)));
     }
     sub.x.forEach(function (w) { tags.push(h("span", { class: "tag minus" }, h("span", { text: w }))); });
 
     return h("button", { class: "card " + (paused ? "off" : "on"), type: "button", style: delay,
                          onclick: function () { openEditor(sub); } },
       head,
-      h("div", { class: "title", text: sub.w.join(" · ") }),
+      h("div", { class: "title", text: subTitle(sub) }),
       tags.length ? h("div", { class: "tags" }, tags) : null,
       activity(sub));
   }
@@ -433,9 +443,23 @@
     var source = sub ? sub.s : (canAll() ? "all" : state.src[0]);
     var draft = sub
       ? { i: sub.i, r: sub.r, s: sub.s, c: sub.c.slice(), k: sub.k, w: sub.w.slice(), x: sub.x.slice(),
-          f: sub.f, t: sub.t, p: sub.p }
-      : { i: null, r: null, s: source, c: ["", ""], k: "", w: [], x: [], f: null, t: null, p: 0 };
+          f: sub.f, t: sub.t, p: sub.p, b: sub.b ? 1 : 0 }
+      : { i: null, r: null, s: source, c: ["", ""], k: "", w: [], x: [], f: null, t: null, p: 0, b: 0 };
+    // фильтры товара — копия: пока не сохранили, подписка не меняется
+    draft.fl = sub && sub.fl ? JSON.parse(JSON.stringify(sub.fl)) : {};
+    draft.flDirty = false;
     push({ name: "editor", draft: draft });
+  }
+
+  // готовая подписка: слова, минус-слова и, если бот умеет фильтры, свой товар (как «ps» в чате)
+  function usePreset(d, p) {
+    d.w = p.w.slice();
+    d.x = p.x.slice();
+    var product = state.fc && p.k ? productOf(p.k) : null;
+    if (!product) return;
+    d.fl = { k: product.k, c: { olx: product.olx.slice(), kaspi: product.kaspi.slice() } };
+    d.flDirty = true;
+    narrowSource(d, product.olx, product.kaspi);
   }
 
   /* Смена площадки по правилу «Везде» (PLAN_V4 3.1): город, которого нет на
@@ -483,6 +507,16 @@
 
     app.appendChild(h("h1", { text: isNew ? T("new_sub") : T("edit_sub") }));
 
+    // быстрый старт: те же готовые подписки, что в чате (config.PRESETS)
+    if (isNew && dirs.presets.length) {
+      app.appendChild(label(T("quick_start")));
+      app.appendChild(h("div", { class: "pills" }, dirs.presets.map(function (p) {
+        var on = d.w.join("|") === p.w.join("|");
+        return h("button", { type: "button", class: "pill" + (on ? " on" : ""),
+          onclick: function () { usePreset(d, p); haptic(); render(); } }, p.label);
+      })));
+    }
+
     // площадка
     var sources = canAll() ? ["all", "olx", "kaspi"] : state.src;
     if (sources.length > 1) {
@@ -500,16 +534,31 @@
     var preview = h("div", { class: "preview" });
     function changed() { drawPreview(preview, d); validate(); }
 
-    app.appendChild(label(T("words")));
-    app.appendChild(chipsField(d.w, state.mw, "", changed));
-    app.appendChild(h("p", { class: "note", text: T("words_hint", { max: state.mw }) }));
+    var byModels = state.fc && flModels(d.fl).length > 0;
+    if (byModels) {
+      app.appendChild(label(T("words")));
+      app.appendChild(h("p", { class: "note", text: T("fl_models_words") }));
+    } else {
+      app.appendChild(label(T("words"), state.fc && flScoped(d.fl) ? T("optional") : ""));
+      app.appendChild(chipsField(d.w, state.mw, "", changed));
+      app.appendChild(h("p", { class: "note", text: T("words_hint", { max: state.mw }) }));
+    }
 
     app.appendChild(label(T("minus")));
     app.appendChild(chipsField(d.x, state.mx, "minus", changed));
     app.appendChild(h("p", { class: "note", text: T("minus_hint", { max: state.mx }) }));
 
-    app.appendChild(preview);
-    drawPreview(preview, d);
+    if (!byModels) {
+      app.appendChild(preview);
+      drawPreview(preview, d);
+    }
+
+    // товар, модели и фильтры (PLAN_FILTERS.md)
+    if (state.fc) {
+      var legacy = !flScoped(d.fl) && hasKaspi(d.s) && d.k ? categoryName(d.k) + " · Kaspi" : "";
+      app.appendChild(label(T("product_label")));
+      app.appendChild(navRow("grid", flSummary(d.fl) || legacy || T("product_any"), "", function () { openProduct(d); }));
+    }
 
     // город
     app.appendChild(label(T("city")));
@@ -528,8 +577,8 @@
     if (d.note) app.appendChild(h("p", { class: "note", text: d.note }));
     if (d.warn) app.appendChild(h("p", { class: "warn", text: d.warn }));
 
-    // категория Kaspi
-    if (hasKaspi(d.s)) {
+    // категория Kaspi (бот без фильтров товара; с ними она внутри «Товар и фильтры»)
+    if (hasKaspi(d.s) && !state.fc) {
       app.appendChild(label(T("category"), d.s === "all" ? T("category_kaspi_only") : ""));
       app.appendChild(navRow("grid", categoryName(d.k), "", function () {
         push({ name: "category", draft: d, parent: parentOf(d.k) });
@@ -540,6 +589,14 @@
     app.appendChild(label(T("price")));
     app.appendChild(priceField(d));
     app.appendChild(h("p", { class: "note", text: T("price_hint") }));
+
+    // поднятые (старые объявления, которым обновили дату)
+    app.appendChild(label(T("bumped")));
+    app.appendChild(h("div", { class: "seg" }, [[0, T("bumped_drop")], [1, T("bumped_all")]].map(function (pair) {
+      return h("button", { type: "button", class: d.b === pair[0] ? "on" : "",
+        onclick: function () { d.b = pair[0]; haptic(); render(); } }, pair[1]);
+    })));
+    app.appendChild(h("p", { class: "seg-hint", text: T("bumped_hint") }));
 
     if (!isNew) {
       app.appendChild(label(T("pause_label")));
@@ -557,8 +614,10 @@
 
     // ошибку показываем после первой попытки сохранить, а не с порога
     function validate() {
-      var problem = !d.w.length ? T("err_words")
-        : (d.f != null && d.t != null && d.f > d.t) ? T("err_price") : "";
+      var scoped = state.fc && flScoped(d.fl);
+      var problem = !d.w.length && !scoped ? T(state.fc ? "err_words_fl" : "err_words")
+        : (d.f != null && d.t != null && d.f > d.t) ? T("err_price")
+        : state.fc && rangeProblem(d.fl) ? T("err_range") : "";
       error.textContent = problem;
       error.hidden = !problem || !screen.tried;
       return !problem;
@@ -569,8 +628,16 @@
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       screen.tried = true;
       if (!validate()) { haptic("error"); return; }
-      send({ v: 1, op: "save", sub: { i: d.i, r: d.r, s: d.s, c: d.c, k: hasKaspi(d.s) ? d.k : "",
-                                        w: d.w, x: d.x, f: d.f, t: d.t, p: d.p ? 1 : 0 } });
+      var sub = { i: d.i, r: d.r, s: d.s, c: d.c, k: hasKaspi(d.s) ? d.k : "",
+                  w: d.w, x: d.x, f: d.f, t: d.t, p: d.p ? 1 : 0, b: d.b ? 1 : 0 };
+      // фильтры — только если их меняли; старая категория Kaspi тогда заменяется ими
+      // (в «Товар и фильтры» она стоит первой строкой — выбор переносит её в фильтры)
+      if (state.fc && d.flDirty) {
+        sub.fl = cleanFl(d.fl);
+        sub.k = "";
+        if (sub.fl.m) sub.w = [];       // модели вместо слов, как в чате
+      }
+      send({ v: 1, op: "save", sub: sub });
     }
 
     screen.validate = validate;
@@ -608,6 +675,7 @@
       return;
     }
     examples(d).forEach(function (title) { box.appendChild(exampleRow(title, d)); });
+    if (state.fc && flScoped(d.fl)) box.appendChild(h("p", { class: "note", text: T("preview_fl_note") }));
 
     var result = h("div");
     var probe = h("input", { class: "probe", type: "text", placeholder: T("preview_probe"), value: d.probe || "",
@@ -812,6 +880,469 @@
     });
   }
 
+  // ------------------------------------------------------------ товар и фильтры (PLAN_FILTERS.md)
+  //
+  // Справочник выгружает tools/export_webapp.py: data/filters/index.json (свои товары
+  // с меню моделей, категории OLX и Kaspi для поиска, пара Kaspi для категории OLX) и
+  // файлы с уже «склеенными» фильтрами: p.json — свои товары, o<раздел>.json — OLX,
+  // k.json — только Kaspi. Бот проверяет каждое сохранение сам (webapp_ops.check_filters).
+  // fl уходит боту, только если его меняли здесь: иначе бот оставляет прежние фильтры.
+
+  var fdir = { index: null, loading: null, files: {}, olxById: {}, kaspiByPath: {}, roots: {} };
+  // как в чате (telegram_bot.PRODUCT_ORDER, MODEL_IMPLIES, pretty_model)
+  var PRODUCT_ORDER = { phones: ["capacity", "state"], consoles: ["state"], macbook: ["state"],
+                        airpods: ["state"], watch: ["state"], tablets: ["state"], gpu: ["state"] };
+  var MODEL_IMPLIES = ["brand"];
+  var MODEL_WORDS = { iphone: "iPhone", ipad: "iPad", macbook: "MacBook", airpods: "AirPods", watch: "Watch",
+                      galaxy: "Galaxy", redmi: "Redmi", note: "Note", poco: "Poco", xiaomi: "Xiaomi",
+                      xbox: "Xbox", "switch": "Switch", steam: "Steam", deck: "Deck", series: "Series" };
+  var MODEL_UPPER = ["se", "xs", "xr", "x", "fe", "xt", "xtx", "oled", "ti", "rtx", "gtx", "rx", "e"];
+  // пределы бота (webapp_ops.MAX_FILTER_*)
+  var MAX_FILTER_MODELS = 30;
+  var MAX_FILTER_VALUES = 60;
+  var SHOWN_VALUES = 40;
+  var SEPARATORS = /[^0-9a-zа-яёәғқңөұүһі]+/g;
+
+  function ensureIndex() {
+    if (fdir.index) return Promise.resolve(fdir.index);
+    if (!fdir.loading) {
+      fdir.loading = getJSON("data/filters/index.json").then(function (index) {
+        index.o.forEach(function (row) { fdir.olxById[row[0]] = row; });
+        index.k.forEach(function (row) { fdir.kaspiByPath[row[0]] = row[1]; });
+        index.r.forEach(function (row) { fdir.roots[row[0]] = row[1]; });
+        fdir.index = index;
+        return index;
+      }, function (e) { fdir.loading = null; throw e; });
+    }
+    return fdir.loading;
+  }
+
+  function productOf(key) {
+    if (!fdir.index || !key) return null;
+    return fdir.index.p.filter(function (p) { return p.k === key; })[0] || null;
+  }
+
+  function productName(p) { return p.e + " " + (lang === "kk" ? p.kk : p.ru); }
+
+  function prettyModel(key) {
+    if (/ \*$/.test(key)) return T("model_line", { model: prettyModel(key.slice(0, -2)) });
+    return key.split(" ").map(function (w) {
+      if (MODEL_WORDS.hasOwnProperty(w)) return MODEL_WORDS[w];
+      if (MODEL_UPPER.indexOf(w) >= 0 || w.indexOf("ps") === 0) return w.toUpperCase();
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    }).join(" ");
+  }
+
+  function flCats(fl) {
+    var c = (fl && fl.c) || {};
+    return { olx: c.olx || [], kaspi: c.kaspi || [] };
+  }
+
+  // категория или модели выбраны — слова не обязательны (как в чате и у бота)
+  function flScoped(fl) {
+    var c = flCats(fl);
+    return !!(c.olx.length || c.kaspi.length || (fl && fl.m && fl.m.length));
+  }
+
+  function flModels(fl) { return (fl && fl.m) || []; }
+
+  function flCategory(fl) {
+    var p = productOf(fl.k);
+    if (p) return productName(p);
+    var c = flCats(fl);
+    if (c.olx.length && fdir.olxById[c.olx[0]]) return fdir.olxById[c.olx[0]][1].split(" → ").pop();
+    if (c.kaspi.length && fdir.kaspiByPath[c.kaspi[0]]) return fdir.kaspiByPath[c.kaspi[0]].split(" → ").pop();
+    return "";
+  }
+
+  // «📱 Смартфоны · iPhone 15 Pro · фильтров: 2» — карточка и строка редактора
+  function flSummary(fl, noModels) {
+    if (!flScoped(fl)) return "";
+    var parts = [flCategory(fl)].filter(Boolean);
+    var models = noModels ? [] : flModels(fl).map(prettyModel);
+    if (models.length) parts.push(models.slice(0, 2).join(", ") + (models.length > 2 ? " +" + (models.length - 2) : ""));
+    var n = Object.keys(fl.f || {}).length + Object.keys(fl.r || {}).length;
+    if (n) parts.push(T("fl_count", { n: n }));
+    return parts.join(" · ");
+  }
+
+  // заголовок подписки без слов: модели или категория (telegram_bot._category_or_models)
+  function subTitle(sub) {
+    if (sub.w && sub.w.length) return sub.w.join(" · ");
+    var models = flModels(sub.fl).map(prettyModel);
+    if (models.length) return models.join(" · ");
+    return flCategory(sub.fl || {}) || "…";
+  }
+
+  function filterFile(fl) {
+    var c = flCats(fl);
+    if (fl.k) return { file: "p.json", key: fl.k };
+    if (c.olx.length && fdir.olxById[c.olx[0]]) return { file: "o" + fdir.olxById[c.olx[0]][2] + ".json", key: String(c.olx[0]) };
+    if (c.kaspi.length) return { file: "k.json", key: c.kaspi[0] };
+    return null;
+  }
+
+  function loadFilters(fl) {
+    var ref = filterFile(fl);
+    if (!ref) return Promise.resolve([]);
+    var ready = fdir.files[ref.file] ? Promise.resolve(fdir.files[ref.file])
+      : getJSON("data/filters/" + ref.file).then(function (file) { fdir.files[ref.file] = file; return file; });
+    return ready.then(function (file) { return file[ref.key] || []; });
+  }
+
+  // выбранные значения, которых больше нет в справочнике (его обновили), — убрать
+  function pruneFilters(fl, filters) {
+    var kinds = {};
+    filters.forEach(function (f) { kinds[f[0]] = f; });
+    Object.keys(fl.f || {}).forEach(function (key) {
+      var f = kinds[key];
+      var known = f && f[1] !== "range" ? f[5].map(function (v) { return v[0]; }) : [];
+      fl.f[key] = fl.f[key].filter(function (v) { return known.indexOf(v) >= 0; });
+      if (!fl.f[key].length) delete fl.f[key];
+    });
+    Object.keys(fl.r || {}).forEach(function (key) {
+      if (!kinds[key] || kinds[key][1] !== "range") delete fl.r[key];
+    });
+  }
+
+  /* Категория есть не на всех площадках подписки — подписка сужается до той, где
+   * она есть (telegram_bot._source_note и webapp_ops._apply_filters): «Везде» +
+   * только OLX-категория → OLX; «OLX» + только Kaspi-категория → Kaspi. */
+  function narrowSource(d, olx, kaspi) {
+    var has = [];
+    if (olx.length) has.push("olx");
+    if (kaspi.length) has.push("kaspi");
+    var current = d.s === "all" ? ["olx", "kaspi"] : [d.s];
+    if (!has.length || current.every(function (s) { return has.indexOf(s) >= 0; })) return;
+    var keep = current.filter(function (s) { return has.indexOf(s) >= 0; });
+    if (!keep.length) keep = has;
+    var source = keep.length === 2 ? "all" : keep[0];
+    if (source === "all" ? !canAll() : state.src.indexOf(source) < 0) return;
+    d.s = source;
+    if (keep.indexOf("olx") < 0) d.c[0] = "";
+    if (keep.indexOf("kaspi") < 0) d.c[1] = "";
+    if (!hasKaspi(d.s)) d.k = "";
+    d.warn = "";
+    d.note = T("fl_only_on", { where: LABELS[source] || T("source_all") });
+  }
+
+  // что уходит боту: только непустые части
+  function cleanFl(fl) {
+    if (!flScoped(fl)) return {};
+    var c = flCats(fl), out = { c: { olx: c.olx.slice(), kaspi: c.kaspi.slice() } };
+    if (fl.k) out.k = fl.k;
+    if (flModels(fl).length) out.m = fl.m.slice();
+    if (fl.f && Object.keys(fl.f).length) out.f = fl.f;
+    if (fl.r && Object.keys(fl.r).length) out.r = fl.r;
+    return out;
+  }
+
+  function rangeProblem(fl) {
+    return Object.keys((fl && fl.r) || {}).some(function (key) {
+      var r = fl.r[key];
+      return r[0] != null && r[1] != null && r[0] > r[1];
+    });
+  }
+
+  function openProduct(d) {
+    push({ name: "product", draft: d, step: "cat", query: "" });
+  }
+
+  function doneProduct() {
+    while (top().name === "product") stack.pop();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function renderProduct(screen) {
+    if (!fdir.index) {
+      app.appendChild(h("p", { class: "note", text: T("loading") }));
+      ensureIndex().then(function () { if (top() === screen) render(); },
+                         function () { if (top() === screen) showError(T("err_load")); });
+      return;
+    }
+    ({ cat: renderProductCat, model: renderProductModel, filters: renderProductFilters })[screen.step](screen, screen.draft);
+  }
+
+  // ---- шаг 1: товар или категория
+
+  function renderProductCat(screen, d) {
+    app.appendChild(h("h1", { text: T("product_title") }));
+    app.appendChild(h("p", { class: "note", text: T("product_hint") }));
+
+    function sameCats(olx, kaspi) {
+      var c = flCats(d.fl);
+      return c.olx.join("|") === olx.join("|") && c.kaspi.join("|") === kaspi.join("|");
+    }
+
+    function choose(olx, kaspi, key) {
+      var old = d.fl;
+      var same = sameCats(olx, kaspi) && (old.k || "") === (key || "");
+      d.fl = { c: { olx: olx.slice(), kaspi: kaspi.slice() } };
+      if (key) d.fl.k = key;
+      // та же категория — модели и фильтры остаются
+      if (same) ["m", "f", "r"].forEach(function (k) { if (old[k]) d.fl[k] = old[k]; });
+      d.flDirty = true;
+      narrowSource(d, olx, kaspi);
+      haptic();
+      push({ name: "product", draft: d, step: key ? "model" : "filters" });
+    }
+
+    app.appendChild(h("div", { class: "pills" }, fdir.index.p.map(function (p) {
+      return h("button", { type: "button", class: "pill" + (d.fl.k === p.k ? " on" : ""),
+        onclick: function () { choose(p.olx, p.kaspi, p.k); } }, productName(p));
+    })));
+
+    var input = h("input", { class: "search", type: "search", placeholder: T("product_search"),
+                             value: screen.query || "", autocomplete: "off" });
+    var list = h("div");
+
+    function fold(text) { return text.toLowerCase().replace(/ё/g, "е"); }
+
+    function row(name, small, tag, onclick, selected) {
+      return h("button", { class: "row" + (selected ? " sel" : ""), type: "button", onclick: onclick },
+        h("span", { class: "grow" }, name, small ? h("small", { text: small }) : null),
+        tag ? h("span", { class: "tag", text: tag }) : null,
+        selected ? h("span", { class: "check", text: "✓" }) : null);
+    }
+
+    function draw() {
+      var q = fold(input.value.trim());
+      screen.query = input.value;
+      list.innerHTML = "";
+      list.appendChild(row(T("product_none"), "", "", function () {
+        d.fl = {};
+        d.flDirty = true;
+        haptic();
+        doneProduct();
+      }, !flScoped(d.fl)));
+      if (q.length < 2) return;
+
+      // свои товары: по названию и по моделям («iphone 15» → Смартфоны)
+      var products = fdir.index.p.filter(function (p) {
+        return [p.ru, p.kk].concat(p.menu.map(function (g) { return g[0]; })).some(function (name) {
+          return fold(name).indexOf(q) >= 0;
+        });
+      });
+      products.forEach(function (p) {
+        list.appendChild(row(productName(p), "", "OLX + Kaspi", function () { choose(p.olx, p.kaspi, p.k); },
+                             d.fl.k === p.k));
+      });
+
+      // сначала совпадение с начала слова в названии, потом в разделе, потом внутри слова:
+      // «шины» — «Автошины» и «Шины, диски…» выше, чем «Стиральные машины»
+      var words = " " + q.replace(SEPARATORS, " ");
+      function rank(name, path) {
+        var n = " " + fold(name).replace(SEPARATORS, " "), p = " " + fold(path).replace(SEPARATORS, " ");
+        return n.indexOf(words) >= 0 ? 0 : p.indexOf(words) >= 0 ? 1 : n.indexOf(q) >= 0 ? 2 : p.indexOf(q) >= 0 ? 3 : -1;
+      }
+
+      var found = [];
+      function add(name, path, olx, kaspi) {
+        var score = rank(name, path);
+        if (score >= 0) found.push({ name: name, path: path, olx: olx, kaspi: kaspi, score: score });
+      }
+      fdir.index.o.forEach(function (r) {
+        var parts = r[1].split(" → ");
+        var name = parts.pop();
+        add(name, [fdir.roots[r[2]] || ""].concat(parts).join(" → "), [r[0]], r[3] ? [r[3]] : []);
+      });
+      fdir.index.k.forEach(function (r) {
+        var parts = r[1].split(" → ");
+        var name = parts.pop();
+        add(name, parts.join(" → "), [], [r[0]]);
+      });
+      found.sort(function (a, b) { return a.score - b.score || a.name.length - b.name.length; });
+      if (!found.length && !products.length) list.appendChild(h("p", { class: "note", text: T("product_nothing") }));
+      found.slice(0, 40).forEach(function (f) {
+        var tag = f.olx.length && f.kaspi.length ? "OLX + Kaspi" : f.olx.length ? "OLX" : "Kaspi";
+        list.appendChild(row(f.name, f.path, tag, function () { choose(f.olx, f.kaspi, ""); },
+                             !d.fl.k && sameCats(f.olx, f.kaspi)));
+      });
+    }
+
+    // сейчас выбрано (категория не своего товара) или старая категория Kaspi — одним
+    // нажатием к её фильтрам, без поиска; старая так переносится в фильтры, как в чате
+    var current = null;
+    if (flScoped(d.fl) && !d.fl.k) {
+      var c = flCats(d.fl);
+      current = { name: flCategory(d.fl) || "…", olx: c.olx, kaspi: c.kaspi };
+    } else if (!flScoped(d.fl) && d.k && hasKaspi(d.s) && fdir.kaspiByPath[d.k]) {
+      current = { name: fdir.kaspiByPath[d.k].split(" → ").pop(), olx: [], kaspi: [d.k] };
+    }
+    if (current) {
+      var tag = current.olx.length && current.kaspi.length ? "OLX + Kaspi" : current.olx.length ? "OLX" : "Kaspi";
+      app.appendChild(label(T("product_current")));
+      app.appendChild(row(current.name, T("product_current_hint"), tag,
+                          function () { choose(current.olx, current.kaspi, ""); }, true));
+    }
+
+    input.addEventListener("input", draw);
+    app.appendChild(input);
+    app.appendChild(list);
+    draw();
+  }
+
+  // ---- шаг 2: модели своего товара
+
+  function lineKey(models) {
+    var first = models[0];
+    return models.every(function (m) { return m === first || m.indexOf(first + " ") === 0; }) ? first + " *" : null;
+  }
+
+  function renderProductModel(screen, d) {
+    var p = productOf(d.fl.k);
+    if (!p) { screen.step = "filters"; render(); return; }
+
+    function chosen() { return d.fl.m || []; }
+
+    // «Все iPhone 15» и отдельные iPhone 15 одной группы друг друга заменяют
+    function toggle(model, drop) {
+      var list = chosen().filter(function (m) { return drop.indexOf(m) < 0; });
+      var i = list.indexOf(model);
+      if (i >= 0) list.splice(i, 1);
+      else if (list.length >= MAX_FILTER_MODELS) { showError(T("too_many", { n: MAX_FILTER_MODELS })); return; }
+      else list.push(model);
+      d.fl.m = list;
+      d.flDirty = true;
+      haptic();
+      render();
+    }
+
+    app.appendChild(h("h1", { text: T("model_title") }));
+    app.appendChild(h("p", { class: "note", text: T("model_hint") }));
+    app.appendChild(h("div", { class: "pills" }, h("button", { type: "button", class: "pill" + (chosen().length ? "" : " on"),
+      onclick: function () { d.fl.m = []; d.flDirty = true; haptic(); render(); } }, T("model_any"))));
+
+    p.menu.forEach(function (group) {
+      var models = group[1], line = lineKey(models);
+      var pills = [];
+      app.appendChild(label(group[0]));
+      if (line) {
+        pills.push(h("button", { type: "button", class: "pill" + (chosen().indexOf(line) >= 0 ? " on" : ""),
+          onclick: function () { toggle(line, models); } }, T("model_line_all", { line: group[0] })));
+      }
+      models.forEach(function (m) {
+        pills.push(h("button", { type: "button", class: "pill" + (chosen().indexOf(m) >= 0 ? " on" : ""),
+          onclick: function () { toggle(m, line ? [line] : []); } }, prettyModel(m)));
+      });
+      app.appendChild(h("div", { class: "pills" }, pills));
+    });
+
+    setDock(T("next"), function () { push({ name: "product", draft: d, step: "filters" }); }, true);
+  }
+
+  // ---- шаг 3: фильтры категории — все сразу, у каждого «Любой»
+
+  function renderProductFilters(screen, d) {
+    app.appendChild(h("h1", { text: T("filters_title") }));
+    var summary = flSummary(d.fl);
+    if (summary) app.appendChild(h("p", { class: "note", text: summary }));
+    var box = h("div", null, h("p", { class: "note", text: T("loading") }));
+    app.appendChild(box);
+    setDock(T("done"), doneProduct, true);
+
+    loadFilters(d.fl).then(function (filters) {
+      if (top() !== screen) return;
+      pruneFilters(d.fl, filters);
+      var byKey = {};
+      filters.forEach(function (f) { byKey[f[0]] = f; });
+      var first = (PRODUCT_ORDER[d.fl.k] || []).filter(function (k) { return byKey[k]; });
+      var keys = first.concat(filters.map(function (f) { return f[0]; }).filter(function (k) { return first.indexOf(k) < 0; }));
+      if (flModels(d.fl).length) keys = keys.filter(function (k) { return MODEL_IMPLIES.indexOf(k) < 0; });
+
+      box.innerHTML = "";
+      if (!keys.length) box.appendChild(h("p", { class: "note", text: T("filters_none") }));
+      keys.forEach(function (key) { box.appendChild(filterBlock(d, byKey[key])); });
+    }, function () {
+      if (top() !== screen) return;
+      box.innerHTML = "";
+      showError(T("err_load"));
+    });
+  }
+
+  function filterBlock(d, f) {
+    var key = f[0], kind = f[1], name = lang === "kk" && f[3] ? f[3] : f[2], unit = f[4], values = f[5];
+    var block = h("div", { class: "filter" }, label(name + (unit ? ", " + unit : "")));
+
+    if (kind === "range") {
+      var r = ((d.fl.r || {})[key] || [null, null]).slice();
+      var hint = h("p", { class: "warn", hidden: true, text: T("err_range") });
+      var set = function (i, text) {
+        var digits = text.replace(/\D/g, "").slice(0, 10);
+        r[i] = digits ? parseInt(digits, 10) : null;
+        d.fl.r = d.fl.r || {};
+        if (r[0] == null && r[1] == null) delete d.fl.r[key]; else d.fl.r[key] = r.slice();
+        d.flDirty = true;
+        hint.hidden = !(r[0] != null && r[1] != null && r[0] > r[1]);
+      };
+      var box = function (i, caption) {
+        return h("label", null, h("small", { text: caption }),
+          h("input", { type: "text", inputmode: "numeric", placeholder: T("filter_any"),
+                       value: r[i] == null ? "" : String(r[i]), oninput: function (e) { set(i, e.target.value); } }));
+      };
+      block.appendChild(h("div", { class: "price" }, box(0, T("price_from")), box(1, T("price_to"))));
+      block.appendChild(hint);
+      hint.hidden = !(r[0] != null && r[1] != null && r[0] > r[1]);
+      return block;
+    }
+
+    var pills = h("div", { class: "pills" });
+    var query = "";
+
+    function chosen() { return (d.fl.f || {})[key] || []; }
+
+    function pill(text, on, onclick) {
+      return h("button", { type: "button", class: "pill" + (on ? " on" : ""), onclick: onclick }, text);
+    }
+
+    function pick(value) {
+      var next = chosen().slice(), i = next.indexOf(value);
+      if (i >= 0) next.splice(i, 1);
+      else if (next.length >= MAX_FILTER_VALUES) { showError(T("too_many", { n: MAX_FILTER_VALUES })); return; }
+      else next.push(value);
+      d.fl.f = d.fl.f || {};
+      if (next.length) d.fl.f[key] = next.sort(); else delete d.fl.f[key];
+      d.flDirty = true;
+      haptic();
+      draw();
+    }
+
+    function draw() {
+      var list = chosen();
+      var q = query.toLowerCase();
+      var shown = values.filter(function (v) { return !q || v[1].toLowerCase().indexOf(q) >= 0; });
+      var more = 0;
+      if (!q && shown.length > SHOWN_VALUES) {
+        more = shown.length - SHOWN_VALUES;
+        // выбранные видны всегда
+        shown = shown.slice(0, SHOWN_VALUES).concat(shown.slice(SHOWN_VALUES).filter(function (v) {
+          return list.indexOf(v[0]) >= 0;
+        }));
+      }
+      pills.innerHTML = "";
+      pills.appendChild(pill(T("filter_any"), !list.length, function () {
+        if (d.fl.f) delete d.fl.f[key];
+        d.flDirty = true;
+        haptic();
+        draw();
+      }));
+      shown.forEach(function (v) {
+        pills.appendChild(pill(v[1], list.indexOf(v[0]) >= 0, function () { pick(v[0]); }));
+      });
+      if (more) pills.appendChild(h("p", { class: "note full", text: T("values_more", { n: more }) }));
+      if (q && !shown.length) pills.appendChild(h("p", { class: "note full", text: T("values_nothing") }));
+    }
+
+    if (values.length > SHOWN_VALUES) {
+      block.appendChild(h("input", { class: "search", type: "search", placeholder: T("value_search"), autocomplete: "off",
+        oninput: function (e) { query = e.target.value.trim(); draw(); } }));
+    }
+    block.appendChild(pills);
+    draw();
+    return block;
+  }
+
   // ------------------------------------------------------------ настройки
 
   function openSettings() {
@@ -959,14 +1490,16 @@
     })[0] || "";
     var now = Math.floor(Date.now() / 1000);
     return {
-      v: 1, l: "ru", lim: 3, u: now + 6 * 86400, pay: 1,
+      v: 1, l: "ru", lim: 3, u: now + 6 * 86400, pay: 1, fc: 1,
       src: ["olx", "kaspi"], sr: 0, q: [23 * 60, 8 * 60, "silent"], qm: "silent", mw: 5, mx: 10,
       st: { d: 34, w: 212, m: 38, t: now },
       subs: [
-        { i: 1, s: "all", c: [astana.o, astana.k], k: "", w: ["iphone 15", "айфон 15"], x: ["чехол", "стекл"],
-          f: null, t: 500000, p: 0, r: 1, n: 23, a: 4 },
+        { i: 1, s: "all", c: [astana.o, astana.k], k: "", w: [], x: ["чехол", "стекл"],
+          f: null, t: 500000, p: 0, r: 1, n: 23, a: 4,
+          fl: { k: "phones", c: { olx: [85], kaspi: ["200/782", "5/21/216"] },
+                m: ["iphone 15 pro", "iphone 15 pro max"], f: { capacity: ["256гб"] } } },
         { i: 2, s: "kaspi", c: ["", almaty.k], k: laptops, w: ["macbook air"], x: [], f: 200000, t: 900000,
-          p: 1, r: 1, n: 5, a: 190 }
+          p: 1, r: 1, n: 5, a: 190, b: 1 }
       ]
     };
   }
@@ -1005,10 +1538,12 @@
       window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", applyTheme);
     }
 
-    Promise.all([getJSON("i18n.json"), getJSON("data/cities.json"), getJSON("data/kaspi_categories.json")])
+    Promise.all([getJSON("i18n.json"), getJSON("data/cities.json"), getJSON("data/kaspi_categories.json"),
+                 getJSON("data/presets.json").catch(function () { return { items: [] }; })])
       .then(function (loaded) {
         i18n = loaded[0];
         dirs = prepareDirs(loaded[1], loaded[2]);
+        dirs.presets = (loaded[3] && loaded[3].items) || [];
 
         var code = hashParam("s");
 
@@ -1032,7 +1567,13 @@
         lang = i18n[state.l] ? state.l : "ru";
         document.documentElement.lang = lang;
         stack = [{ name: "home" }];
-        render();
+        // названия товаров и категорий в карточках — из справочника фильтров;
+        // не загрузился — карточки покажут модели и слова, остальное подгрузится позже
+        var needed = state.fc && state.subs.some(function (sub) { return flScoped(sub.fl); });
+        return (needed ? ensureIndex().catch(function () { return null; }) : Promise.resolve()).then(function () {
+          render();
+          if (state.fc) ensureIndex().catch(function () { return null; });
+        });
       })
       .catch(function () {
         app.innerHTML = "";

@@ -467,3 +467,9 @@ h1 { font-family: var(--display); font-size: 24px; font-weight: 700; letter-spac
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ------------------------------------------------------------ товар и фильтры */
+
+.filter { margin-bottom: 4px; }
+.filter .search { margin-bottom: 8px; }
+.pills .note.full { flex-basis: 100%; margin-top: 4px; }
