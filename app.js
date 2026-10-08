@@ -1,4 +1,4 @@
-/* Perekup Radar — Telegram Mini App без своего сервера.
+/* StuffTracker — Telegram Mini App без своего сервера.
  *
  * Откуда данные:
  *   - настройки подписчика бот кладёт в адрес кнопки: #s=j.<base64 JSON> или

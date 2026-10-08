@@ -1,6 +1,6 @@
-# Perekup Radar — приложение
+# StuffTracker — приложение
 
-Страница Telegram Mini App для бота Perekup Radar (объявления OLX и Kaspi).
+Страница Telegram Mini App для бота StuffTracker (объявления OLX и Kaspi).
 Раздаётся через GitHub Pages, своего сервера нет.
 
 Настройки подписчика бот передаёт в адресе после `#` — эта часть адреса на сервер
